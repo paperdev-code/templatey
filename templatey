@@ -1,0 +1,137 @@
+#!/usr/bin/python3
+import argparse
+import os
+                                 
+# 888888888888                                          88                                               
+#      88       github.com/paperdev-code/templatey      88                ,d     
+#      88                                               88                88                             
+#      88   ,adPPYba,  88,dPYba,,adPYba,   8b,dPPYba,   88  ,adPPYYba,  MM88MMM  ,adPPYba,  8b       d8  
+#      88  a8P_____88  88P'   "88"    "8a  88P'    "8a  88  ""     `Y8    88    a8P_____88  `8b     d8'  
+#      88  8PP"""""""  88      88      88  88       d8  88  ,adPPPPP88    88    8PP"""""""   `8b   d8'   
+#      88  "8b,   ,aa  88      88      88  88b,   ,a8"  88  88,    ,88    88,   "8b,   ,aa    `8b,d8'    
+#      88   `"Ybbd8"'  88      88      88  88`YbbdP"'   88  `"8bbdP"Y8    "Y888  `"Ybbd8"'      Y88'     
+#                                          88                                                   d8'      
+#      Paperdev's incredibly basic         88         file creation & automation tool!         d8'       
+
+# Use predefined parameters instead of user arguments:
+# ex. ['theme.templatey-config']
+CONFIG_FILES   = []
+# ex. ['style.css.templatey']
+TEMPLATE_FILES = []
+
+def main() :
+  parser = argparse.ArgumentParser()
+  
+  predefined_templates = False
+  configs = None
+  predefined_configs = False
+  templates = None
+
+  if TEMPLATE_FILES != [] :
+    # ex. --templates style.css.template ...
+    parser.add_argument(
+      '-t', '--template',
+      nargs='+',
+      required=True,
+      help='template paths',
+    )
+    predefined_templates = True
+
+  if CONFIG_FILES != [] :
+    # ex. --config template.config
+    parser.add_argument(
+      '-c', '--config',
+      nargs='+',
+      required=True,
+      help='config paths'
+    )
+    predefined_configs = True
+
+  if predefined_configs and predefined_templates :
+    configs   = CONFIG_FILES
+    templates = TEMPLATE_FILES
+  else :
+    args = parser.parse_args()
+    if not predefined_configs :
+      configs = args.config
+    if not predefined_templates :
+      templates = args.template
+
+  selectors = []
+  pairs     = []
+
+  for config_path in configs :
+    config = parse_config(config_path)
+    selectors += config['selectors']
+    pairs     += config['pairs']
+
+  for template_path in templates :
+    build_template(template_path, selectors, pairs)
+    
+
+# parse a config file
+def parse_config(config_path) :
+  selectors = [] # {prefix, postfix}
+  pairs     = [] # {key, value}
+  
+  with open(config_path, 'r') as file:
+    lines = file.readlines()
+  l = 1
+  for line in lines :
+    # remove newline at the end of lines
+    line = line.rstrip('\n')
+
+    # ignore empty lines
+    if line == '' :
+      continue
+
+    # comments are ignored
+    elif line[0] == '#' :
+      continue
+    
+    # '@' is reserved for builtins
+    elif line[0] == '@' :
+      builtin_name, value = line[1:].split('=', maxsplit=1)
+      if builtin_name == 'selector' :
+        if value.find('...') == -1 :
+          return SyntaxError(f'invalid syntax on line {l}')
+        prefix, postfix = value.split('...', maxsplit=1)
+        if prefix is None or postfix is None :
+          return SyntaxError(f'invalid syntax on line {l}')
+        selectors.append({'prefix' : prefix, 'postfix' : postfix})
+    
+    # first character of a key must be alphabetic
+    elif line[0].isalpha() :
+      key, value = line.split('=', maxsplit=1)
+      pairs.append({'key' : key, 'value' : value})
+    
+    # everything else is wrong =)
+    else :
+      return SyntaxError(f'invalid character on line {l}')
+    l = l + 1
+
+  # if no selectors defined, set the default selector.
+  if len(selectors) == 0 :
+    selectors.append({'prefix' : '@', 'postfix' : '@'})
+
+  return {'selectors' : selectors, 'pairs' : pairs}
+
+# build file from template
+def build_template(template_path, selectors, pairs) :
+  # read the entire file into a continuous buffer
+  with open(template_path, 'r') as file :
+    contents = file.read()
+
+    # do passes with each selector
+    for selector in selectors :
+      # find every instance of each key and replace with value
+      for pair in pairs :
+        target = f"{selector['prefix']}{pair['key']}{selector['postfix']}"
+        contents = contents.replace(target, pair['value'])
+
+    filepath = os.path.splitext(template_path)[0]
+    with open(filepath, 'w') as file:
+      file.write(contents)
+
+if __name__ == '__main__' :
+  main()
